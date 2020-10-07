@@ -8,7 +8,7 @@
       include_vars: vars/vpc_setup
 
     - name: Import VPC setup Variable
-      include_vars: vars/output_vars
+      include_vars: vars/vpc-output_vars
 
     - name: Create vprofile ec2 key
       ec2_key:
