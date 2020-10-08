@@ -6,18 +6,11 @@
     timestamp: "{{ansible_date_time.date}}_{{ansible_date_time.hour}}_{{ansible_date_time.minute}}"
     tom_url: https://archive.apache.org/dist/tomcat/tomcat-8/v8.5.37/bin/apache-tomcat-8.5.37.tar.gz
   tasks:
-    - name: Install JDK on Centos 6/7
-      yum:
-        name: java-1.8.0-openjdk.x86_64
-        state: present
-      when: ansible_distribution == 'CentOS'
-
-    - name: Install JDK on Ubuntu 14/15/16/18
+    - name: Install JDK on Ubuntu 18/20
       apt:
         name: openjdk-8-jdk
         state: present
         update_cache: yes
-      when: ansible_distribution == 'Ubuntu'
 
     - name: Download Tomcat Tar Ball/Binaries
       get_url:
@@ -134,7 +127,7 @@
           rescue:
             - shell: cp -r old_ROOT ROOT
               args:
-                chdir: //usr/local/tomcat8/webapps/
+                chdir: /usr/local/tomcat8/webapps/
 
       rescue:
         - name: Start tomcat8 svc
