@@ -1,0 +1,118 @@
+---
+- name: Setup Tomcat8 & Deploy Artifact
+  hosts: appsrvgrp
+  #  gather_facts: no
+  vars:
+    timestamp: "{{ansible_date_time.date}}_{{ansible_date_time.hour}}_{{ansible_date_time.minute}}"
+  tasks:
+    - name: Install Tomcat 8 & dependencies
+      package:
+        name: "{{item}}"
+        state: latest
+        update_cache: yes
+        cache_valid_time: 86400
+      with_items:
+        - tomcat8
+        - tomcat8-admin
+        - tomcat8-docs
+        - tomcat8-common
+      tags:
+        - package
+
+    - name: Start & Enable tomcat SVC
+      service:
+        name: tomcat8
+        state: started
+        enabled: yes
+      tags:
+        - svc
+
+    - stat:
+        path: /var/lib/tomcat8/webapps/ROOT
+      register: artifact_stat
+      tags:
+        - deploy
+
+    - name: Stop tomcat8 svc
+      service:
+        name: tomcat8
+        state: stopped
+      tags:
+        - deploy
+
+    - name: Try Backup and Deploy
+      block:
+        - name: Archive ROOT dir with timestamp
+          archive:
+            path: /var/lib/tomcat8/webapps/ROOT
+            dest: "/opt/ROOT_{{timestamp}}.tgz"
+          when: artifact_stat.stat.exists
+          register: archive_info
+          tags:
+            - deploy
+
+        - name: copy ROOT dir with old_ROOT name
+          shell: cp -r ROOT old_ROOT
+          args:
+            chdir: /var/lib/tomcat8/webapps/
+
+        - name: Delete current artifact
+          file:
+            path: "{{item}}"
+            state: absent
+          when: archive_info.changed
+          loop:
+            - /var/lib/tomcat8/webapps/ROOT
+            - /var/lib/tomcat8/webapps/ROOT.war
+          tags:
+            - deploy
+
+        - name: Try deploy artifact else restore from previos old_ROOT
+          block:
+            - name: Deploy vprofile artifact
+              copy:
+                src: files/ROOT.war
+                dest: /var/lib/tomcat8/webapps/ROOT.war
+              register: deploy_info
+              tags:
+                - deploy
+          rescue:
+            - shell: cp -r old_ROOT ROOT
+              args:
+                chdir: /var/lib/tomcat8/webapps/
+
+      rescue:
+        - name: Start tomcat8 svc
+          service:
+            name: tomcat8
+            state: started
+
+    - name: Start tomcat8 svc
+      service:
+        name: tomcat8
+        state: started
+      when: deploy_info.changed
+      tags:
+        - deploy
+
+    - name: Wait until ROOT.war is extracted to ROOT directory
+      wait_for:
+        path: /var/lib/tomcat8/webapps/ROOT
+      tags:
+        - deploy
+
+    - name: Deploy web configuration file
+      template:
+        src: templates/application.j2
+        dest: /var/lib/tomcat8/webapps/ROOT/WEB-INF/classes/application.properties
+        force: yes
+      notify:
+        - Restart Tomcat
+      tags:
+        - deploy
+
+  handlers:
+    - name: Restart Tomcat
+      service:
+        name: tomcat8
+        state: restarted
